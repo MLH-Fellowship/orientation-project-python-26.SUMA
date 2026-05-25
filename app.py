@@ -3,12 +3,13 @@ Flask Application
 '''
 import re
 from dataclasses import asdict
+from typing import Any
 from flask import Flask, jsonify, request
 from models import Experience, Education, Skill, UserInfo
 
 app = Flask(__name__)
 
-data = {
+data: dict[str, Any] = {
     "user_info": UserInfo(
         "John Doe",
         "+1234567890",
@@ -222,5 +223,7 @@ def user_info():
             "data": asdict(data['user_info'])
         })
     return jsonify({})
+
+
 if __name__ == "__main__":
     app.run(debug=True)
