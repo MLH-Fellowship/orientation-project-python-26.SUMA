@@ -46,6 +46,14 @@ def hello_world():
     return jsonify({"message": "Hello, World!"})
 
 
+@app.route('/')
+def home():
+    '''
+    Returns a JSON homepage message
+    '''
+    return jsonify({"message": "Resume API is running"})
+
+
 @app.route('/resume/experience', methods=['GET', 'POST', 'DELETE'])
 def experience():
     '''
@@ -214,3 +222,5 @@ def user_info():
             "data": asdict(data['user_info'])
         })
     return jsonify({})
+if __name__ == "__main__":
+    app.run(debug=True)
