@@ -53,70 +53,105 @@ def experience():
     '''
     Handle experience requests
     '''
-    response = {}
-    status = 200
-    if request.method == 'GET':
-        experience_list = [
-            {
-                "title": exp.title,
-                "company": exp.company,
-                "start_date": exp.start_date,
-                "end_date": exp.end_date,
-                "description": exp.description,
-                "logo": exp.logo
-            }
-            for exp in data['experience']
-        ]
-        return jsonify(experience_list)
+    # Use a small dispatch map to reduce branching and keep handlers in
+    # dedicated helper functions. Handlers may return either a Flask
+    # response object (from jsonify) or a (payload, status) tuple.
+    handlers = {
+        'GET': _get_experience,
+        'POST': _post_experience,
+        'PUT': _put_experience,
+        'DELETE': lambda: _delete_experience(request.get_json()),
+    }
 
-    if request.method == 'POST':
-        req = request.get_json()
+    handler = handlers.get(request.method)
+    if handler is None:
+        return jsonify({}), 405
 
-        required_fields = ["title", "company", "start_date", "end_date", "description", "logo"]
-        if not req or not isinstance(req, dict) or any(field not in req for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
+    result = handler()
 
-        try:
-            new_experience = Experience(**req)
-        except TypeError:
-            return jsonify({"error": "Invalid format"}), 400
+    # If a helper returned a (payload, status) tuple, unpack it and
+    # jsonify the payload unless it is already a Flask response.
+    if isinstance(result, tuple) and len(result) == 2:
+        payload, status = result
+        if hasattr(payload, 'get_data'):
+            return payload, status
+        return jsonify(payload), status
 
-        data['experience'].append(new_experience)
-        response = {"id": len(data['experience']) - 1}
-    elif request.method == 'PUT':
-        body = request.get_json()
-        if not body or 'id' not in body:
-            response = {"error": "ID is required for update"}
-            status = 400
-        else:
-            try:
-                item_id = int(body['id'])
-            except (ValueError, TypeError):
-                response = {"error": "ID must be an integer"}
-                status = 400
-            else:
-                if item_id < 0 or item_id >= len(data['experience']):
-                    response = {"error": "ID is out of range"}
-                    status = 400
-                else:
-                    try:
-                        updated_experience = Experience(
-                            title=body['title'],
-                            company=body['company'],
-                            start_date=body['start_date'],
-                            end_date=body['end_date'],
-                            description=body['description'],
-                            logo=body['logo']
-                        )
-                    except KeyError as exc:
-                        response = {"error": f"Missing field: {exc}"}
-                        status = 400
-                    else:
-                        data['experience'][item_id] = updated_experience
-                        response = {"id": item_id}
-    elif request.method == 'DELETE':
-        return _delete_experience(request.get_json())
-    return jsonify(response), status
+    # Otherwise assume handler returned a Flask response or raw payload.
+    if hasattr(result, 'get_data'):
+        return result
+    return jsonify(result)
+
+
+def _get_experience():
+    """Return list of experiences as payload, status."""
+    experience_list = [
+        {
+            "title": exp.title,
+            "company": exp.company,
+            "start_date": exp.start_date,
+            "end_date": exp.end_date,
+            "description": exp.description,
+            "logo": exp.logo,
+        }
+        for exp in data['experience']
+    ]
+    return experience_list, 200
+
+
+def _post_experience():
+    """Create a new experience from JSON body."""
+    req = request.get_json()
+
+    required_fields = [
+        "title",
+        "company",
+        "start_date",
+        "end_date",
+        "description",
+        "logo",
+    ]
+
+    if not req or not isinstance(req, dict) or any(field not in req for field in required_fields):
+        return {"error": "Missing required fields"}, 400
+
+    try:
+        new_experience = Experience(**req)
+    except TypeError:
+        return {"error": "Invalid format"}, 400
+
+    data['experience'].append(new_experience)
+    return {"id": len(data['experience']) - 1}, 200
+
+
+def _put_experience():
+    """Update existing experience identified by id in JSON body."""
+    body = request.get_json()
+    if not body or 'id' not in body:
+        return {"error": "ID is required for update"}, 400
+
+    try:
+        item_id = int(body['id'])
+    except (ValueError, TypeError):
+        return {"error": "ID must be an integer"}, 400
+
+    if item_id < 0 or item_id >= len(data['experience']):
+        return {"error": "ID is out of range"}, 400
+
+    try:
+        updated_experience = Experience(
+            title=body['title'],
+            company=body['company'],
+            start_date=body['start_date'],
+            end_date=body['end_date'],
+            description=body['description'],
+            logo=body['logo'],
+        )
+    except KeyError as exc:
+        return {"error": f"Missing field: {exc}"}, 400
+
+    data['experience'][item_id] = updated_experience
+    return {"id": item_id}, 200
 
 
 @app.route('/resume/experience/<int:index>', methods=['GET'])
